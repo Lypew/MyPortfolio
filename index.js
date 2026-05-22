@@ -180,12 +180,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (!messageText) return;
 
-        // 유저 메시지 출력
         appendMessage(messageText, 'user-message');
 
         chatInput.value = '';
 
-        // 로딩 메시지
         const loadingDiv = document.createElement('div');
 
         loadingDiv.classList.add('message', 'bot-message');
@@ -198,34 +196,29 @@ document.addEventListener("DOMContentLoaded", () => {
         chatBox.scrollTop = chatBox.scrollHeight;
 
 
-        /* ==========================================
-           1️⃣ 로컬 캐시 먼저 확인
-           ========================================== */
-
-        const cachedAnswer = getChatCache(messageText);
-
-        if (cachedAnswer) {
-
-            chatBox.removeChild(loadingDiv);
-
-            appendMessage(
-                `📦 캐시 답변\n\n${cachedAnswer}`,
-                'bot-message'
-            );
-
-            return;
-        }
+        // 공통 요청 옵션
+        const requestBody = {
+            contents: [
+                {
+                    parts: [
+                        {
+                            text: messageText
+                        }
+                    ]
+                }
+            ]
+        };
 
 
         /* ==========================================
-           2️⃣ 온라인 API 요청
-           ========================================== */
+        1️⃣ 로컬 Flask 서버 먼저 시도
+        ========================================== */
 
         try {
 
-            console.log("🌐 온라인 API 요청");
+            console.log("🖥️ 로컬 서버 시도");
 
-            const response = await fetch(
+            const localResponse = await fetch(
                 'http://localhost:5000/api/chat',
                 {
                     method: 'POST',
@@ -240,57 +233,95 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             );
 
-            // 응답 실패
-            if (!response.ok) {
-
-                throw new Error(
-                    `서버 응답 실패: ${response.status}`
-                );
+            if (!localResponse.ok) {
+                throw new Error("로컬 서버 실패");
             }
 
-            const data = await response.json();
+            const localData =
+                await localResponse.json();
 
-            // 로딩 제거
             chatBox.removeChild(loadingDiv);
 
-            // 답변 출력
             appendMessage(
-                data.reply,
+                localData.reply,
                 'bot-message'
             );
 
-            // 💾 로컬 저장
-            saveChatCache(
-                messageText,
-                data.reply
+            console.log("✅ 로컬 서버 응답 성공");
+
+            return;
+
+        } catch (localError) {
+
+            console.warn(
+                "⚠️ 로컬 실패 → Gemini API 시도",
+                localError
             );
-
-            console.log("✅ 온라인 응답 저장 완료");
-
         }
 
 
         /* ==========================================
-           3️⃣ 최종 에러 처리
-           ========================================== */
+        2️⃣ Gemini API 직접 호출
+        ========================================== */
 
-        catch (error) {
+        try {
 
-            console.error("❌ 서버 연결 실패:", error);
+            console.log("🌐 Gemini API 요청");
+
+            const geminiResponse = await fetch(
+                'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
+                {
+                    method: 'POST',
+
+                    headers: {
+                        'Content-Type': 'application/json',
+
+                        'X-goog-api-key':
+                            'YOUR_API_KEY'
+                    },
+
+                    body: JSON.stringify(requestBody)
+                }
+            );
+
+            if (!geminiResponse.ok) {
+
+                throw new Error(
+                    `Gemini API 실패: ${geminiResponse.status}`
+                );
+            }
+
+            const geminiData =
+                await geminiResponse.json();
+
+            const reply =
+                geminiData?.candidates?.[0]?.content?.parts?.[0]?.text
+                || "응답 생성 실패";
+
+            chatBox.removeChild(loadingDiv);
+
+            appendMessage(
+                reply,
+                'bot-message'
+            );
+
+            console.log("✅ Gemini API 응답 성공");
+
+        } catch (geminiError) {
+
+            console.error(
+                "❌ Gemini API 실패",
+                geminiError
+            );
 
             chatBox.removeChild(loadingDiv);
 
             appendMessage(
                 `
-❌ 서버 연결 실패
+    ❌ 서버 연결 실패
 
-현재 AI 서버와 연결할 수 없습니다.
-
-가능한 원인:
-- Flask/FastAPI 서버 꺼짐
-- localhost:5000 미실행
-- CORS 문제
-- 네트워크 문제
+    로컬 서버와 Gemini API
+    모두 연결할 수 없습니다.
                 `,
                 'bot-message'
             );
