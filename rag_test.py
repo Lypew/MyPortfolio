@@ -97,30 +97,6 @@ def chat_endpoint():
         print(f"❌ 에러 발생: {e}")
         return jsonify({"error": str(e)}), 500
 
-# 🔒 [진짜 로그인 기능] 프론트엔드에서 보낸 ID/PW를 가상 데이터베이스와 비교 검증하는 API
-@app.route('/api/login', methods=['POST'])
-def login_endpoint():
-    data = request.json
-    username = data.get("username", "")
-    password = data.get("password", "")
-    
-    print(f"🔑 로그인 시도 수신 -> ID: {username}")
-    
-    # 가상의 Firebase 저장 데이터베이스 회원정보 (테스트용 ID: admin / PW: 1234)
-    if username == "admin" and password == "1234":
-        print("✅ 로그인 성공!")
-        return jsonify({
-            "success": True, 
-            "message": "로그인에 성공했습니다.",
-            "user": {"name": "안민재", "role": "Developer"}
-        })
-    else:
-        print("❌ 로그인 실패: 일치하는 회원 정보 없음")
-        return jsonify({
-            "success": False, 
-            "message": "아이디 또는 비밀번호가 올바르지 않습니다."
-        }), 401
-
 if __name__ == "__main__":
     init_rag_system()
     print("🚀 [3/3] 로컬 RAG API 서버 가동 시작 ➔ http://localhost:5000")
