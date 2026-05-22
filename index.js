@@ -227,3 +227,79 @@ document.addEventListener("DOMContentLoaded", () => {
     // 최초 렌더링
     renderPosts();
 });
+
+// 🔒 [진짜 로그인 기능] 프론트엔드 제어 로직
+
+const loginModal = document.getElementById('loginModal');
+const navLoginBtn = document.getElementById('navLoginBtn');
+const closeLoginBtn = document.getElementById('closeLoginBtn');
+const doLoginBtn = document.getElementById('doLoginBtn');
+const welcomeMsg = document.getElementById('welcomeMsg');
+
+// 1. 페이지 로드 시 기존 로그인 상태 확인 (Session 유지)
+window.addEventListener('DOMContentLoaded', () => {
+    const savedUser = localStorage.getItem('portfolioUser');
+    if (savedUser) {
+        setLoggedInUI(savedUser);
+    }
+});
+
+// 2. 상단 로그인 버튼 클릭 -> 모달창 열기 / 혹은 로그아웃 처리
+navLoginBtn.addEventListener('click', () => {
+    if (localStorage.getItem('portfolioUser')) {
+        // 이미 로그인 상태라면 -> 로그아웃 처리
+        localStorage.removeItem('portfolioUser');
+        alert('로그아웃 되었습니다.');
+        location.reload();
+    } else {
+        // 비로그인 상태라면 -> 로그인 모달창 열기
+        loginModal.style.display = 'flex';
+    }
+});
+
+// 3. 모달창 닫기
+closeLoginBtn.addEventListener('click', () => {
+    loginModal.style.display = 'none';
+});
+
+// 4. 진짜 백엔드 서버와 통신하여 로그인 처리하기
+doLoginBtn.addEventListener('click', async () => {
+    const id = document.getElementById('loginId').value;
+    const pw = document.getElementById('loginPw').value;
+
+    if (!id || !pw) {
+        alert('아이디와 비밀번호를 모두 입력해 주세요.');
+        return;
+    }
+
+    try {
+        // ⚙️ 파이썬 서버의 로그인 검증 API로 데이터 전송!
+        const response = await fetch('http://localhost:5000/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: id, password: pw })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            alert(`${result.user.name}님, 환영합니다! (진짜 로그인 성공)`);
+            localStorage.setItem('portfolioUser', result.user.name); // 브라우저에 로그인 상태 저장
+            setLoggedInUI(result.user.name);
+            loginModal.style.display = 'none';
+        } else {
+            alert(result.message);
+        }
+    } catch (error) {
+        console.error('로그인 통신 에러:', error);
+        alert('백엔드 서버가 꺼져있거나 통신에 실패했습니다.');
+    }
+});
+
+// 5. 로그인 성공 시 UI 전환 함수
+function setLoggedInUI(userName) {
+    welcomeMsg.innerText = `👋 ${userName} 개발자님`;
+    welcomeMsg.style.display = 'inline';
+    navLoginBtn.innerText = '로그아웃';
+    navLoginBtn.style.style = 'padding:8px 16px; background:#ff4444; color:white; border:none; border-radius:5px; cursor:pointer; font-weight:bold;';
+}
