@@ -1,4 +1,5 @@
-# rag_test.py (검색 키워드 보완 및 검색 범위 확장 버전)
+import os
+import requests
 import json
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -87,17 +88,52 @@ def chat_endpoint():
     
     if not user_message:
         return jsonify({"error": "질문 내용이 없습니다."}), 400
-        
-    try:
-        print(f"📥 웹 요청 수신: {user_message}")
-        reply = rag_chain.invoke(user_message)
-        print(f"📤 Ollama RAG 답변 매칭 및 생성 완료!")
-        return jsonify({"reply": reply})
-    except Exception as e:
-        print(f"❌ 에러 발생: {e}")
-        return jsonify({"error": str(e)}), 500
 
-if __name__ == "__main__":
+    try:
+        print("🖥️ [1차 시도] 로컬 Ollama 엔진 구동...")
+        response = rag_chain.invoke(user_message)
+        return jsonify({"reply": response})
+        
+    except Exception as e:
+        print(f"⚠️ 로컬 Ollama 실패 또는 꺼져있음: {e}")
+        print("🌐 [2차 시도] 시스템 환경변수를 사용하여 Gemini API 우회(Fallback)를 시작합니다...")
+
+        # 시스템 환경변수에서 GEMINI_API_KEY를 안전하게 가져옵니다.
+        api_key = os.environ.get("GEMINI_API_KEY")
+        
+        if not api_key:
+            print("❌ 에러: 시스템 환경변수에 'GEMINI_API_KEY'가 등록되어 있지 않습니다.")
+            return jsonify({
+                "reply": "❌ 로컬 인공지능 엔진이 꺼져 있으며, 백엔드 서버 시스템에 'GEMINI_API_KEY' 환경변수가 설정되지 않아 우회할 수 없습니다."
+            }), 500
+
+        try:
+            url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
+            headers = {
+                "Content-Type": "application/json",
+                "X-goog-api-key": api_key  # 환경변수 값 바인딩
+            }
+            payload = {
+                "contents": [{
+                    "parts": [{"text": user_message}]
+                }]
+            }
+            
+            # 구글 Gemini API 서버로 요청 포워딩
+            gemini_response = requests.post(url, json=payload, headers=headers)
+            
+            if gemini_response.status_code == 200:
+                res_json = gemini_response.json()
+                reply = res_json['candidates'][0]['content']['parts'][0]['text']
+                print("✅ Gemini API 우회 응답 성공!")
+                return jsonify({"reply": reply})
+            else:
+                return jsonify({"reply": f"❌ Gemini API 통신 오류 (Status: {gemini_response.status_code})"}), 500
+                
+        except Exception as gemini_err:
+            print(f"❌ Gemini API 최종 호출 실패: {gemini_err}")
+            return jsonify({"reply": "❌ 로컬 서버와 온라인 우회 API 채널이 모두 마비되었습니다. 나중에 다시 시도해주세요."}), 500
+
+if __name__ == '__main__':
     init_rag_system()
-    print("🚀 [3/3] 로컬 RAG API 서버 가동 시작 ➔ http://localhost:5000")
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host='0.0.0.0', port=5000, debug=True)
